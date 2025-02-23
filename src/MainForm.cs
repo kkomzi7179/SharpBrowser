@@ -16,6 +16,7 @@ using System.Reflection;
 using SharpBrowser.Browser;
 using SharpBrowser.Browser.Model;
 using System.Windows.Forms.VisualStyles;
+using System.Threading.Tasks;
 
 namespace SharpBrowser {
 
@@ -629,7 +630,61 @@ namespace SharpBrowser {
 				}
 			}
 		}
+		private async Task HighlightElement(string selector) {
+			string script = @"
+        function addOverlay(selector) {
+            // 대상 엘리먼트 찾기
+            const element = document.querySelector(selector);
+            if (!element) return;
 
+            // 엘리먼트의 위치와 크기 가져오기
+            const rect = element.getBoundingClientRect();
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+            // 오버레이 div 생성
+            const overlay = document.createElement('div');
+            overlay.id = 'custom-overlay';
+            overlay.style.position = 'absolute';
+            overlay.style.left = (rect.left + scrollLeft) + 'px';
+            overlay.style.top = (rect.top + scrollTop) + 'px';
+            overlay.style.width = rect.width + 'px';
+            overlay.style.height = rect.height + 'px';
+            overlay.style.backgroundColor = 'yellow';  // 원하는 색상으로 변경 가능
+            overlay.style.opacity = '0.5';
+            overlay.style.pointerEvents = 'none';  // 클릭 이벤트가 하위 엘리먼트로 전달되도록
+            overlay.style.zIndex = '10000';
+
+            // 기존 오버레이 제거
+            const existingOverlay = document.getElementById('custom-overlay');
+            if (existingOverlay) {
+                existingOverlay.remove();
+            }
+
+            // 새 오버레이 추가
+            document.body.appendChild(overlay);
+
+            return {
+                left: rect.left + scrollLeft,
+                top: rect.top + scrollTop,
+                width: rect.width,
+                height: rect.height
+            };
+        }
+        return addOverlay('" + selector + "');";
+
+			var response = await chromiumWebBrowser1.EvaluateScriptAsync(script);
+
+			if(response.Success) {
+				// 오버레이 위치 정보를 C#에서 사용할 수 있음
+				dynamic result = response.Result;
+				if(result != null) {
+					Console.WriteLine($"Overlay added at: {result.left}, {result.top}");
+				}
+			} else {
+				Console.WriteLine($"Fail to Overlay: {selector}");
+			}
+		}
 		public void InvokeIfNeeded(Action action) {
 			if (this.InvokeRequired) {
 				this.BeginInvoke(action);
