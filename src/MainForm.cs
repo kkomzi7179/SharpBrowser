@@ -367,7 +367,7 @@ namespace SharpBrowser {
 
 			// add events
 			browser.StatusMessage += Browser_StatusMessage;
-			browser.LoadingStateChanged += Browser_LoadingStateChanged;
+			browser.LoadingStateChanged += Browser_LoadingStateChangedAsync;
 			browser.TitleChanged += Browser_TitleChanged;
 			browser.LoadError += Browser_LoadError;
 			browser.AddressChanged += Browser_URLChanged;
@@ -609,7 +609,7 @@ namespace SharpBrowser {
 			}
 		}
 
-		private void Browser_LoadingStateChanged(object sender, LoadingStateChangedEventArgs e) {
+		private async void Browser_LoadingStateChangedAsync(object sender, LoadingStateChangedEventArgs e) {
 			if (sender == CurBrowser) {
 
 				EnableBackButton(e.CanGoBack);
@@ -621,68 +621,177 @@ namespace SharpBrowser {
 					//SetTabTitle();
 
 				} else {
-
 					// after loaded / stopped
 					InvokeIfNeeded(() => {
 						BtnRefresh.Visible = true;
 						BtnStop.Visible = false;
 					});
 				}
+
+				if(!e.Browser.HasDocument) {
+					InvokeIfNeeded(async () => {
+						await HighlightMultipleElements(".keyword_bx._item._check_visible");
+					});
+				}
 			}
 		}
-		private async Task HighlightElement(string selector) {
+		//private async Task HighlightElement(string selector) {
+		//	string script = @"
+		//      function addOverlay(selector) {
+		//          // 대상 엘리먼트 찾기
+		//          const element = document.querySelector(selector);
+		//          if (!element) return;
+
+		//          // 엘리먼트의 위치와 크기 가져오기
+		//          const rect = element.getBoundingClientRect();
+		//          const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+		//          const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+		//          // 오버레이 div 생성
+		//          const overlay = document.createElement('div');
+		//          overlay.id = 'custom-overlay';
+		//          overlay.style.position = 'absolute';
+		//          overlay.style.left = (rect.left + scrollLeft) + 'px';
+		//          overlay.style.top = (rect.top + scrollTop) + 'px';
+		//          overlay.style.width = rect.width + 'px';
+		//          overlay.style.height = rect.height + 'px';
+		//          overlay.style.backgroundColor = 'yellow';  // 원하는 색상으로 변경 가능
+		//          overlay.style.opacity = '0.5';
+		//          overlay.style.pointerEvents = 'none';  // 클릭 이벤트가 하위 엘리먼트로 전달되도록
+		//          overlay.style.zIndex = '10000';
+
+		//          // 기존 오버레이 제거
+		//          const existingOverlay = document.getElementById('custom-overlay');
+		//          if (existingOverlay) {
+		//              existingOverlay.remove();
+		//          }
+
+		//          // 새 오버레이 추가
+		//          document.body.appendChild(overlay);
+
+		//          return {
+		//              left: rect.left + scrollLeft,
+		//              top: rect.top + scrollTop,
+		//              width: rect.width,
+		//              height: rect.height
+		//          };
+		//      }
+		//      return addOverlay('" + selector + "');";
+
+		//	var response = await CurBrowser.EvaluateScriptAsync(script);
+
+		//	if(response.Success) {
+		//		// 오버레이 위치 정보를 C#에서 사용할 수 있음
+		//		dynamic result = response.Result;
+		//		if(result != null) {
+		//			Debug.WriteLine($"Overlay added at: {result.left}, {result.top}");
+		//		}
+		//	} else {
+		//		Debug.WriteLine($"Fail to Overlay: {selector}");
+		//	}
+		//}
+		private async Task HighlightMultipleElements(string selector) {
+			if(!CurBrowser.CanExecuteJavascriptInMainFrame) { return; }
 			string script = @"
-        function addOverlay(selector) {
-            // 대상 엘리먼트 찾기
-            const element = document.querySelector(selector);
-            if (!element) return;
+        (function addOverlaysWithLogging(selector) {
+            console.log(`Searching for elements with selector: ${selector}`);
+            const elements = document.querySelectorAll(selector);
+            const overlays = [];
+            const logs = [];
 
-            // 엘리먼트의 위치와 크기 가져오기
-            const rect = element.getBoundingClientRect();
-            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-
-            // 오버레이 div 생성
-            const overlay = document.createElement('div');
-            overlay.id = 'custom-overlay';
-            overlay.style.position = 'absolute';
-            overlay.style.left = (rect.left + scrollLeft) + 'px';
-            overlay.style.top = (rect.top + scrollTop) + 'px';
-            overlay.style.width = rect.width + 'px';
-            overlay.style.height = rect.height + 'px';
-            overlay.style.backgroundColor = 'yellow';  // 원하는 색상으로 변경 가능
-            overlay.style.opacity = '0.5';
-            overlay.style.pointerEvents = 'none';  // 클릭 이벤트가 하위 엘리먼트로 전달되도록
-            overlay.style.zIndex = '10000';
-
-            // 기존 오버레이 제거
-            const existingOverlay = document.getElementById('custom-overlay');
-            if (existingOverlay) {
-                existingOverlay.remove();
+            if (elements.length === 0) {
+                const message = `No elements found for selector: ${selector}`;
+                console.log(message);
+                logs.push(message);
+                return { overlays, logs };
             }
 
-            // 새 오버레이 추가
-            document.body.appendChild(overlay);
+            console.log(`Found ${elements.length} elements`);
+            logs.push(`Found ${elements.length} elements for selector: ${selector}`);
 
-            return {
-                left: rect.left + scrollLeft,
-                top: rect.top + scrollTop,
-                width: rect.width,
-                height: rect.height
-            };
-        }
-        return addOverlay('" + selector + "');";
+            const removedOverlays = document.querySelectorAll('.custom-overlay');
+            removedOverlays.forEach(el => el.remove());
+            if (removedOverlays.length > 0) {
+                const message = `Removed ${removedOverlays.length} existing overlays`;
+                console.log(message);
+                logs.push(message);
+            }
 
-			var response = await chromiumWebBrowser1.EvaluateScriptAsync(script);
+            elements.forEach((element, index) => {
+                try {
+                    const rect = element.getBoundingClientRect();
+                    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+                    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
 
-			if(response.Success) {
-				// 오버레이 위치 정보를 C#에서 사용할 수 있음
+                    const overlay = document.createElement('div');
+                    overlay.className = 'custom-overlay';
+                    overlay.setAttribute('data-element-index', index);
+                    overlay.style.position = 'absolute';
+                    overlay.style.left = (rect.left + scrollLeft) + 'px';
+                    overlay.style.top = (rect.top + scrollTop) + 'px';
+                    overlay.style.width = rect.width + 'px';
+                    overlay.style.height = rect.height + 'px';
+                    overlay.style.backgroundColor = 'yellow';
+                    overlay.style.opacity = '0.5';
+                    overlay.style.pointerEvents = 'none';
+                    overlay.style.zIndex = '10000';
+
+                    document.body.appendChild(overlay);
+
+                    const elementInfo = {
+                        index: index,
+                        left: rect.left + scrollLeft,
+                        top: rect.top + scrollTop,
+                        width: rect.width,
+                        height: rect.height,
+                        tagName: element.tagName.toLowerCase(),
+                        classes: Array.from(element.classList).join(' '),
+                        id: element.id
+                    };
+
+                    overlays.push(elementInfo);
+                    
+                    const message = `Created overlay for element ${index}: ${elementInfo.tagName}` + 
+                        (elementInfo.id ? ` #${elementInfo.id}` : '') + 
+                        (elementInfo.classes ? ` .${elementInfo.classes.replace(' ', '.')}` : '');
+                    console.log(message);
+                    logs.push(message);
+
+                } catch (error) {
+                    const message = `Error creating overlay for element ${index}: ${error.message}`;
+                    console.error(message);
+                    logs.push(message);
+                }
+            });
+
+            return { overlays, logs };
+        })('" + selector + "');";  // 즉시 실행 함수로 변경하고 selector를 인자로 전달
+
+			var response = await CurBrowser.EvaluateScriptAsync(script);
+
+			if(response.Success && response.Result != null) {
 				dynamic result = response.Result;
-				if(result != null) {
-					Console.WriteLine($"Overlay added at: {result.left}, {result.top}");
+
+				// C#에서 로그 출력
+				Debug.WriteLine("=== Overlay Creation Log ===");
+				foreach(string log in result.logs) {
+					Debug.WriteLine(log);
+				}
+
+				// 오버레이 정보 출력
+				Debug.WriteLine("\n=== Created Overlays ===");
+				foreach(dynamic overlay in result.overlays) {
+					Debug.WriteLine($"Element {overlay.index}: {overlay.tagName}" +
+									$"{(overlay.id != "" ? $" #${overlay.id}" : "")}" +
+									$"{(overlay.classes != "" ? $" .{overlay.classes.Replace(" ", ".")}" : "")} " +
+									$"at ({overlay.left}, {overlay.top}), " +
+									$"size: {overlay.width}x{overlay.height}");
 				}
 			} else {
-				Console.WriteLine($"Fail to Overlay: {selector}");
+				Debug.WriteLine("Failed to execute overlay script");
+				if(response.Message != null) {
+					Debug.WriteLine($"Error: {response.Message}");
+				}
 			}
 		}
 		public void InvokeIfNeeded(Action action) {

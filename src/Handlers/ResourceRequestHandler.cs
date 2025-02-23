@@ -209,8 +209,8 @@ namespace SharpBrowser {
 				if (!request.Url.IsURLLocalhost()) {
 
 					// redirect to web archive to try and find older version
-					frame.LoadUrl("http://web.archive.org/web/*/" + request.Url);
-
+					//frame.LoadUrl("http://web.archive.org/web/*/" + request.Url);
+					System.Diagnostics.Debug.WriteLine($"404 : {request.Url}");
 				}
 				else {
 
